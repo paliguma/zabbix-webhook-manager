@@ -1,0 +1,5 @@
+port: "8080"
+webhook_path: "/webhook"
+log_headers: true
+log_body: true
+max_body_bytes: 1048576
