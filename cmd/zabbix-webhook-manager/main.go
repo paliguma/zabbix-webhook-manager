@@ -21,22 +21,26 @@ func main() {
 	}
 
 	log.Printf(
-		"Config: port=%s path=%s max_body_bytes=%d log_headers=%t log_body=%t",
+		"Config: port=%s endpoints=%d max_body_bytes=%d log_headers=%t log_body=%t",
 		cfg.Port,
-		cfg.WebhookPath,
+		len(cfg.Endpoints),
 		cfg.MaxBodyBytes,
 		cfg.LogHeaders,
 		cfg.LogBody,
 	)
 
-	handler := webhook.Handler{
-		LogHeaders:   cfg.LogHeaders,
-		LogBody:      cfg.LogBody,
-		MaxBodyBytes: cfg.MaxBodyBytes,
-	}
-
 	mux := http.NewServeMux()
-	mux.Handle(cfg.WebhookPath, handler)
+	for _, endpoint := range cfg.Endpoints {
+		handler := webhook.Handler{
+			EndpointName: endpoint.Name,
+			EndpointPath: endpoint.Path,
+			LogHeaders:   cfg.LogHeaders,
+			LogBody:      cfg.LogBody,
+			MaxBodyBytes: cfg.MaxBodyBytes,
+		}
+		log.Printf("Registering webhook endpoint: name=%q path=%q", endpoint.Name, endpoint.Path)
+		mux.Handle(endpoint.Path, handler)
+	}
 
 	srv := httpserver.Server{
 		Addr:    ":" + cfg.Port,

@@ -1,7 +1,7 @@
 package webhook
 
 import (
-	"fmt"
+	"encoding/json"
 	"io"
 	"log"
 	"net/http"
@@ -9,6 +9,8 @@ import (
 )
 
 type Handler struct {
+	EndpointName string
+	EndpointPath string
 	LogHeaders   bool
 	LogBody      bool
 	MaxBodyBytes int64
@@ -34,7 +36,9 @@ func (h Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	defer r.Body.Close()
 
-	log.Printf("Webhook received: %s %s", r.Method, r.URL.Path)
+	endpoint := h.endpointLabel(r.URL.Path)
+
+	log.Printf("Webhook received: endpoint=%q method=%s path=%s", endpoint, r.Method, r.URL.Path)
 	log.Printf("Remote: %s", r.RemoteAddr)
 	if h.LogHeaders {
 		log.Printf("Headers:\n%s", formatHeaders(r.Header))
@@ -45,7 +49,10 @@ func (h Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	fmt.Fprint(w, `{"status":"ok"}`)
+	_ = json.NewEncoder(w).Encode(map[string]string{
+		"status":   "ok",
+		"endpoint": endpoint,
+	})
 }
 
 func formatHeaders(h http.Header) string {
@@ -57,4 +64,14 @@ func formatHeaders(h http.Header) string {
 		b.WriteString("\n")
 	}
 	return b.String()
+}
+
+func (h Handler) endpointLabel(requestPath string) string {
+	if h.EndpointName != "" {
+		return h.EndpointName
+	}
+	if h.EndpointPath != "" {
+		return h.EndpointPath
+	}
+	return requestPath
 }
