@@ -7,3 +7,6 @@ endpoints:
 log_headers: true
 log_body: true
 max_body_bytes: 1048576
+https_enabled: false
+tls_cert_file: ""
+tls_key_file: ""

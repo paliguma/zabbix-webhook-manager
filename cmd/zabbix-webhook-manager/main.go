@@ -21,12 +21,13 @@ func main() {
 	}
 
 	log.Printf(
-		"Config: port=%s endpoints=%d max_body_bytes=%d log_headers=%t log_body=%t",
+		"Config: port=%s endpoints=%d max_body_bytes=%d log_headers=%t log_body=%t https=%t",
 		cfg.Port,
 		len(cfg.Endpoints),
 		cfg.MaxBodyBytes,
 		cfg.LogHeaders,
 		cfg.LogBody,
+		cfg.HTTPSEnabled,
 	)
 
 	mux := http.NewServeMux()
@@ -43,8 +44,11 @@ func main() {
 	}
 
 	srv := httpserver.Server{
-		Addr:    ":" + cfg.Port,
-		Handler: mux,
+		Addr:        ":" + cfg.Port,
+		Handler:     mux,
+		EnableHTTPS: cfg.HTTPSEnabled,
+		TLSCertFile: cfg.TLSCertFile,
+		TLSKeyFile:  cfg.TLSKeyFile,
 	}
 
 	log.Fatal(srv.Start())

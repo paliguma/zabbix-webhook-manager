@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -33,6 +34,11 @@ type Config struct {
 	LogHeaders   bool       `yaml:"log_headers"`
 	LogBody      bool       `yaml:"log_body"`
 	MaxBodyBytes int64      `yaml:"max_body_bytes"`
+	HTTPSEnabled bool       `yaml:"https_enabled"`
+	TLSCertFile  string     `yaml:"tls_cert_file"`
+	TLSKeyFile   string     `yaml:"tls_key_file"`
+
+	httpsEnabledSet bool `yaml:"-"`
 }
 
 type Endpoint struct {
@@ -48,7 +54,9 @@ func Load() (Config, string, bool, error) {
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			applyDefaults(&cfg)
-			applyEnvOverrides(&cfg)
+			if err := applyEnvOverrides(&cfg); err != nil {
+				return Config{}, path, false, err
+			}
 			if err := validateConfig(cfg); err != nil {
 				return Config{}, path, false, err
 			}
@@ -60,9 +68,14 @@ func Load() (Config, string, bool, error) {
 	if err := yaml.Unmarshal(data, &cfg); err != nil {
 		return Config{}, path, true, err
 	}
+	if err := applyHTTPSSettingFromConfigFile(data, &cfg); err != nil {
+		return Config{}, path, true, err
+	}
 
 	applyDefaults(&cfg)
-	applyEnvOverrides(&cfg)
+	if err := applyEnvOverrides(&cfg); err != nil {
+		return Config{}, path, true, err
+	}
 	if err := validateConfig(cfg); err != nil {
 		return Config{}, path, true, err
 	}
@@ -113,11 +126,28 @@ func applyDefaults(cfg *Config) {
 	if cfg.WebhookPath == "" {
 		cfg.WebhookPath = cfg.Endpoints[0].Path
 	}
+	if !cfg.httpsEnabledSet && cfg.TLSCertFile != "" && cfg.TLSKeyFile != "" {
+		cfg.HTTPSEnabled = true
+	}
 }
 
-func applyEnvOverrides(cfg *Config) {
+func applyEnvOverrides(cfg *Config) error {
 	if envPort := os.Getenv("PORT"); envPort != "" {
 		cfg.Port = envPort
+	}
+	if envHTTPSEnabled := os.Getenv("HTTPS_ENABLED"); envHTTPSEnabled != "" {
+		enabled, err := strconv.ParseBool(envHTTPSEnabled)
+		if err != nil {
+			return fmt.Errorf("invalid HTTPS_ENABLED value %q: %w", envHTTPSEnabled, err)
+		}
+		cfg.HTTPSEnabled = enabled
+		cfg.httpsEnabledSet = true
+	}
+	if envTLSCertFile := os.Getenv("TLS_CERT_FILE"); envTLSCertFile != "" {
+		cfg.TLSCertFile = envTLSCertFile
+	}
+	if envTLSKeyFile := os.Getenv("TLS_KEY_FILE"); envTLSKeyFile != "" {
+		cfg.TLSKeyFile = envTLSKeyFile
 	}
 	if envPath := os.Getenv("WEBHOOK_PATH"); envPath != "" {
 		cfg.WebhookPath = envPath
@@ -128,6 +158,21 @@ func applyEnvOverrides(cfg *Config) {
 			},
 		}
 	}
+	return nil
+}
+
+func applyHTTPSSettingFromConfigFile(data []byte, cfg *Config) error {
+	var parsed struct {
+		HTTPSEnabled *bool `yaml:"https_enabled"`
+	}
+	if err := yaml.Unmarshal(data, &parsed); err != nil {
+		return err
+	}
+	if parsed.HTTPSEnabled != nil {
+		cfg.HTTPSEnabled = *parsed.HTTPSEnabled
+		cfg.httpsEnabledSet = true
+	}
+	return nil
 }
 
 func normalizeEndpoints(cfg *Config) {
@@ -157,6 +202,16 @@ func normalizeEndpoints(cfg *Config) {
 }
 
 func validateConfig(cfg Config) error {
+	if cfg.HTTPSEnabled && (cfg.TLSCertFile == "" || cfg.TLSKeyFile == "") {
+		return errors.New("tls_cert_file and tls_key_file are required when https_enabled is true")
+	}
+	if cfg.TLSCertFile == "" && cfg.TLSKeyFile != "" {
+		return errors.New("tls_cert_file is required when tls_key_file is set")
+	}
+	if cfg.TLSCertFile != "" && cfg.TLSKeyFile == "" {
+		return errors.New("tls_key_file is required when tls_cert_file is set")
+	}
+
 	if len(cfg.Endpoints) == 0 {
 		return errors.New("at least one webhook endpoint must be configured")
 	}
