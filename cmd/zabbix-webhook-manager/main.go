@@ -33,13 +33,19 @@ func main() {
 	mux := http.NewServeMux()
 	for _, endpoint := range cfg.Endpoints {
 		handler := webhook.Handler{
-			EndpointName: endpoint.Name,
-			EndpointPath: endpoint.Path,
-			LogHeaders:   cfg.LogHeaders,
-			LogBody:      cfg.LogBody,
-			MaxBodyBytes: cfg.MaxBodyBytes,
+			EndpointName:   endpoint.Name,
+			EndpointPath:   endpoint.Path,
+			AllowedSources: endpoint.AllowedSources,
+			LogHeaders:     cfg.LogHeaders,
+			LogBody:        cfg.LogBody,
+			MaxBodyBytes:   cfg.MaxBodyBytes,
 		}
-		log.Printf("Registering webhook endpoint: name=%q path=%q", endpoint.Name, endpoint.Path)
+		log.Printf(
+			"Registering webhook endpoint: name=%q path=%q allowed_sources=%d",
+			endpoint.Name,
+			endpoint.Path,
+			len(endpoint.AllowedSources),
+		)
 		mux.Handle(endpoint.Path, handler)
 	}
 

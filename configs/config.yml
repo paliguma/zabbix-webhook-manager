@@ -2,8 +2,13 @@ port: "8080"
 endpoints:
   - name: "zabbix-primary"
     path: "/webhook/primary"
+    allowed_sources:
+      - "127.0.0.1"
+      - "::1"
+      - "10.0.0.0/24"
   - name: "zabbix-secondary"
     path: "/webhook/secondary"
+    # No allowed_sources means no source filtering (all addresses are allowed).
 log_headers: true
 log_body: true
 max_body_bytes: 1048576

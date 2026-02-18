@@ -3,6 +3,7 @@ package config
 import (
 	"errors"
 	"fmt"
+	"net"
 	"os"
 	"strconv"
 	"strings"
@@ -42,8 +43,9 @@ type Config struct {
 }
 
 type Endpoint struct {
-	Name string `yaml:"name"`
-	Path string `yaml:"path"`
+	Name           string   `yaml:"name"`
+	Path           string   `yaml:"path"`
+	AllowedSources []string `yaml:"allowed_sources"`
 }
 
 func Load() (Config, string, bool, error) {
@@ -184,6 +186,15 @@ func normalizeEndpoints(cfg *Config) {
 		if endpoint.Name == "" {
 			endpoint.Name = endpoint.Path
 		}
+		normalizedAllowed := make([]string, 0, len(endpoint.AllowedSources))
+		for _, source := range endpoint.AllowedSources {
+			source = strings.TrimSpace(source)
+			if source == "" {
+				continue
+			}
+			normalizedAllowed = append(normalizedAllowed, source)
+		}
+		endpoint.AllowedSources = normalizedAllowed
 		endpoints = append(endpoints, endpoint)
 	}
 
@@ -233,6 +244,27 @@ func validateConfig(cfg Config) error {
 			)
 		}
 		seenPaths[endpoint.Path] = endpoint.Name
+
+		for _, source := range endpoint.AllowedSources {
+			if strings.Contains(source, "/") {
+				if _, _, err := net.ParseCIDR(source); err != nil {
+					return fmt.Errorf(
+						"endpoint %q has invalid allowed_sources CIDR %q: %w",
+						endpoint.Name,
+						source,
+						err,
+					)
+				}
+				continue
+			}
+			if ip := net.ParseIP(source); ip == nil {
+				return fmt.Errorf(
+					"endpoint %q has invalid allowed_sources IP %q",
+					endpoint.Name,
+					source,
+				)
+			}
+		}
 	}
 
 	return nil
